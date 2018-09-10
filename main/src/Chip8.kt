@@ -1,4 +1,5 @@
 import chipset.Chip8FontSet
+import chipset.Chip8OpcodeInstructionDecoder
 import com.sun.org.apache.xpath.internal.operations.Bool
 import sun.security.util.BitArray
 import java.io.File
@@ -11,7 +12,7 @@ class Chip8 {
   //  0x200-0xFFF - Program ROM and work RAM
   var opcode: Int = 0
   var memory = IntArray(4096)
-  var registerV = IntArray(16) // VF (registerV[16]) is the carry flag
+  var registerV = IntArray(16) // VF (registerV[15]) is the carry flag
 
   var indexRegister: Int = 0
   var programCounter: Int = 0
@@ -40,11 +41,11 @@ class Chip8 {
     // Clear display
     displayClear()
     // Clear stack
-    stack = ShortArray(16)
+    stack = IntArray(16)
     // Clear registers V0-VF
-    registerV = CharArray(16)
+    registerV = IntArray(16)
     // Clear memory
-    memory = CharArray(4096)
+    memory = IntArray(4096)
 
     // Load fontset
     // automagic some fucking chip8_fontset?
@@ -68,9 +69,9 @@ class Chip8 {
   fun emulateCycle() {
     // Fetch Opcode
     val opcode = fetchOpcode()
-    // Decode Opcode
-    decodeOpcode(opcode)
-    // Execute Opcode
+    programCounter += 2
+    // Decode & Execute Opcode
+    handleOpcode(opcode)
 
     // Update timers
   }
@@ -80,8 +81,8 @@ class Chip8 {
     return memory[programCounter] shl 8 or memory[programCounter + 1]
   }
 
-  private fun decodeOpcode(opcode: Int) {
-
+  private fun handleOpcode(opcode: Int) {
+    Chip8OpcodeInstructionDecoder(this).runCodeByInstruction(opcode)
   }
 
 //  private fun memoryAddrToInt(address: Int): Int {
@@ -97,7 +98,7 @@ class Chip8 {
   }
 
   fun flowReturn() {
-    TODO("please do")
+    subtractFromStack()
   }
 
   fun draw(x: Int, y: Int, height: Int) {
@@ -107,7 +108,7 @@ class Chip8 {
     var currPos = indexRegister
     for (i in 0..height) {
       for(c in 0..width) {
-        if( vfx[(x+i)*(y+c)] && !intToBool(memory[indexRegister]) ) registerV[16] = 1
+        if( vfx[(x+i)*(y+c)] && !intToBool(memory[indexRegister]) ) flipCarryFlag()
         vfx[(x+i)*(y+c)] = intToBool(memory[indexRegister])
         currPos += 1
       }
@@ -130,6 +131,11 @@ class Chip8 {
     stackPointer += 1
   }
 
+  private fun subtractFromStack() {
+    stackPointer -= 1
+    programCounter = stack[stackPointer]
+  }
+
   fun setIndexRegisterToAddress(address: Int) {
     indexRegister = address
   }
@@ -140,14 +146,45 @@ class Chip8 {
   }
 
   fun skipNextInstructionIfCellsAreEqual(cell1: Int, cell2: Int) {
-    if (memory[cell1] == memory[cell2]) programCounter += 1
-    programCounter += 1
+    skipNextInstructionIfValuesAreEqual(memory[cell1], memory[cell2])
+  }
+
+  fun skipNextInstructionIfValuesAreEqual(x: Int, y: Int) {
+    if (x == y) programCounter += 1
+  }
+
+  fun skipNextInstructionIfValuesAreNotEqual(x: Int, y: Int) {
+    if (x != y) programCounter += 1
   }
 
   fun skipNextInstructionIfCellsNotAreEqual(cell1: Int, cell2: Int) {
-    if (memory[cell1] != memory[cell2]) programCounter += 1
-    programCounter += 1
+    skipNextInstructionIfValuesAreNotEqual(memory[cell1], memory[cell2])
   }
+
+  fun setRegisterToValue(register: Int, value: Int) {
+    registerV[register] = value
+  }
+
+  // Carry flag is not changed.
+  fun addValueToRegister(register: Int, value: Int) {
+    registerV[register] = value
+  }
+
+  fun flipCarryFlag() {
+    registerV[15] = 1
+  }
+
+  fun unflipCarryFlag() {
+    registerV[15] = 0
+  }
+
+  fun setRegisterIndex(x: Int) {
+    indexRegister = x
+  }
+
+  fun getRegisterIndex() = indexRegister
+
+  fun getRegisterValue(register: Int) = registerV[register]
 
   private fun intToBool(int: Int) = if(int == 0) False else True
 }
